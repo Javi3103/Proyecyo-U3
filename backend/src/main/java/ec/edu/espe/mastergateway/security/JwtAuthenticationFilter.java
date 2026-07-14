@@ -61,8 +61,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         UUID userId = UUID.fromString(claims.getSubject());
         UUID rolId = UUID.fromString(claims.get(JwtService.CLAIM_ROL_ID, String.class));
+        String rolNombre = claims.get(JwtService.CLAIM_ROL_NOMBRE, String.class);
         List<String> permisos = claims.get(JwtService.CLAIM_PERMISOS, List.class);
-        AuthenticatedUser principal = new AuthenticatedUser(userId, rolId, permisos == null ? List.of() : permisos);
+        AuthenticatedUser principal = new AuthenticatedUser(userId, rolId, rolNombre, permisos == null ? List.of() : permisos);
 
         List<GrantedAuthority> authorities = principal.permisos().stream()
                 .map(permiso -> (GrantedAuthority) new SimpleGrantedAuthority(permiso))

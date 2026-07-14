@@ -35,12 +35,13 @@ class JwtServiceTest {
         UUID rolId = UUID.randomUUID();
         List<String> permisos = List.of("ventas:crear-orden", "ventas:listar-ordenes");
 
-        String token = jwtService.generarAccessToken(usuarioId, rolId, permisos);
+        String token = jwtService.generarAccessToken(usuarioId, rolId, "Vendedor", permisos);
         Claims claims = jwtService.parseClaims(token).getPayload();
 
         assertThat(claims.getSubject()).isEqualTo(usuarioId.toString());
         assertThat(claims.get(JwtService.CLAIM_TIPO, String.class)).isEqualTo(JwtService.TIPO_ACCESS);
         assertThat(claims.get(JwtService.CLAIM_ROL_ID, String.class)).isEqualTo(rolId.toString());
+        assertThat(claims.get(JwtService.CLAIM_ROL_NOMBRE, String.class)).isEqualTo("Vendedor");
         assertThat(claims.get(JwtService.CLAIM_PERMISOS, List.class)).containsExactlyElementsOf(permisos);
     }
 
