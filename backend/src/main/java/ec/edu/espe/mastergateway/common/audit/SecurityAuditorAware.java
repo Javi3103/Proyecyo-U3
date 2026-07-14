@@ -1,5 +1,6 @@
 package ec.edu.espe.mastergateway.common.audit;
 
+import ec.edu.espe.mastergateway.security.AuthenticatedUser;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.AuditorAware;
@@ -19,8 +20,8 @@ public class SecurityAuditorAware implements AuditorAware<UUID> {
         if (authentication == null || !authentication.isAuthenticated()) {
             return Optional.empty();
         }
-        if (authentication.getPrincipal() instanceof UUID userId) {
-            return Optional.of(userId);
+        if (authentication.getPrincipal() instanceof AuthenticatedUser user) {
+            return Optional.of(user.userId());
         }
         return Optional.empty();
     }
