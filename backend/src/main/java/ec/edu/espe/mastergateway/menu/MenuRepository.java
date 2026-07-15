@@ -26,6 +26,7 @@ public interface MenuRepository extends JpaRepository<Menu, UUID> {
                 SELECT m.*
                 FROM menu m
                 INNER JOIN rol_menu rm ON rm.menu_id = m.id AND rm.estado = 'ACTIVO'
+                INNER JOIN modulo mo ON mo.id = m.modulo_id AND mo.estado = 'ACTIVO'
                 WHERE rm.rol_id = :rolId AND m.estado = 'ACTIVO'
 
                 UNION

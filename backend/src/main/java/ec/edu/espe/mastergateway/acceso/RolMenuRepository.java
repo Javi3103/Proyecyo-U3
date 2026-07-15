@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface RolMenuRepository extends JpaRepository<RolMenu, UUID> {
 
     List<RolMenu> findByRolId(UUID rolId);
+
+    boolean existsByRolIdAndMenuId(UUID rolId, UUID menuId);
 }
