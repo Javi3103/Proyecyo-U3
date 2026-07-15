@@ -3,7 +3,20 @@
 Sistema de Autenticación y Autorización Centralizado (microservicio maestro) para un ecosistema de microservicios.
 
 - **Backend**: Spring Boot + Hibernate/JPA + PostgreSQL (`/backend`)
-- **Frontend**: React + React Router (`/frontend`)
+- **Frontend**: React + Vite + React Router + Tailwind CSS (`/frontend`)
+
+## Correr el frontend en desarrollo
+
+```
+cd frontend
+cp .env.example .env   # ajusta VITE_API_BASE_URL si el backend no corre en localhost:8080
+npm install
+npm run dev
+```
+
+Requiere el backend corriendo en paralelo (con `CORS_ALLOWED_ORIGIN=http://localhost:5173`, que ya es el valor por defecto). El flujo implementado: `/login` → `/select-role` (Workspace Selector, obligatorio) → `/app` con sidebar y rutas construidas dinámicamente desde `GET /api/menus/tree` (sin rutas hardcodeadas).
+
+**Nota:** no existe todavía un usuario sembrado en la base de datos ni un endpoint público de registro (`POST /api/users` está protegido), así que para probar el login hace falta insertar manualmente un usuario con contraseña hasheada en BCrypt directamente en Postgres.
 
 ## Estrategia de ramas
 
