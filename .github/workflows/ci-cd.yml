@@ -1,0 +1,404 @@
+name: DevSecOps Dev->Test->Main Pipeline
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TRIGGER:
+#   • Push         → rama 'dev'   : crea un PR automático dev → test
+#   • Pull Request → rama 'test'  : ejecuta toda la cadena (nodos 1-5)
+#   • Push         → rama 'main'  : solo notifica el despliegue exitoso
+# ──────────────────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches:
+      - dev
+      - main
+  pull_request:
+    branches:
+      - test
+
+jobs:
+
+  # ============================================================================
+  # NODO 0: CREACIÓN AUTOMÁTICA DE PR (dev → test)
+  # Se ejecuta al hacer push a 'dev'. Crea un PR automático hacia 'test'.
+  # ============================================================================
+  create_pr:
+    name: "Crear PR automático (dev → test)"
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Crear Pull Request de dev → test
+        env:
+          # PAT_AUTOMATION (en vez de GITHUB_TOKEN) para que la creación del PR
+          # dispare los siguientes nodos del pipeline.
+          GH_TOKEN: ${{ secrets.PAT_AUTOMATION }}
+        run: |
+          EXISTING_PR=$(gh pr list --base test --head dev --state open --json number --jq '.[0].number')
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Ya existe un PR abierto de dev → test: #$EXISTING_PR"
+            echo "   Se actualizará automáticamente con los nuevos cambios."
+          else
+            echo " Creando nuevo PR de dev → test..."
+            gh pr create \
+              --base test \
+              --head dev \
+              --title " [CI] Merge automático dev → test" \
+              --body "### PR generado automáticamente por el pipeline CI/CD
+
+          **Rama origen:** \`dev\`
+          **Rama destino:** \`test\`
+          **Commit:** \`${{ github.sha }}\`
+          **Autor:** @${{ github.actor }}
+
+          ---
+          > Este PR fue creado automáticamente al hacer push a la rama \`dev\`.
+          > El pipeline de seguridad y pruebas se ejecutará a continuación."
+            echo "PR creado exitosamente."
+          fi
+
+      - name: Notificar creación de PR via Telegram
+        if: success()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="Markdown" \
+            -d text=" *PR Automático creado*%0A%0ASe ha creado/actualizado un PR de \`dev\` → \`test\`.%0AEl pipeline de validación iniciará en breve.%0A%0ACommit: \`${{ github.sha }}\`%0AAutor: ${{ github.actor }}"
+
+  # ============================================================================
+  # NODO 1: REVISIÓN DE SEGURIDAD (Modelo de Minería ML)
+  # Evalúa los .java modificados del PR con el modelo predictivo Python
+  # (carpeta /seguridad). Si hay vulnerabilidades, comenta el PR, crea un Issue
+  # y bloquea el avance del pipeline.
+  # ============================================================================
+  security_scan:
+    name: "Revisión de Seguridad (ML)"
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+      contents: write
+
+    steps:
+      - name: Descargar código del PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias del modelo ML
+        run: |
+          cd seguridad
+          pip install -r requirements.txt
+
+      - name: Ejecutar Modelo Predictivo de Seguridad
+        env:
+          GITHUB_TOKEN:    ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER:       ${{ github.event.pull_request.number }}
+          MODELO_API_URL:  ${{ secrets.MODELO_API_URL }}
+          TELEGRAM_TOKEN:  ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          cd seguridad
+          python evaluar_pr.py
+
+  # ============================================================================
+  # NODO 2: ANÁLISIS ESTÁTICO TRADICIONAL (SonarCloud)
+  # Depende del Nodo 1. Corre en PARALELO con el Nodo 3 (JUnit).
+  # Exige que el Quality Gate de SonarCloud pase para continuar el pipeline.
+  # ============================================================================
+  sonarcloud_scan:
+    name: "Análisis Estático (SonarCloud)"
+    needs: security_scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # SonarCloud necesita el historial completo para el "blame"
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Cachear paquetes de SonarCloud
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Build, tests, cobertura y análisis SonarCloud
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN:  ${{ secrets.SONAR_TOKEN }}
+          # DB_* y JWT_SECRET: application.properties los exige explícitamente
+          # (sin estos, el ApplicationContext de los tests no arranca).
+          DB_URL:       jdbc:h2:mem:testdb
+          DB_USERNAME:  sa
+          DB_PASSWORD:  ""
+          JWT_SECRET:   ${{ secrets.JWT_SECRET_TEST }}
+        run: |
+          cd backend
+          chmod +x ./mvnw
+          ./mvnw -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.qualitygate.wait=true
+        # -Dsonar.qualitygate.wait=true hace que el step FALLE si el Quality Gate
+        # no pasa (Code Smells / Bugs / Vulnerabilidades / Cobertura), cumpliendo
+        # el requisito de "el Quality Gate debe pasar para continuar".
+
+      - name: Notificar resultado de SonarCloud via Telegram
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            TEXTO=" *Nodo 2: SonarCloud PASADO*%0AQuality Gate aprobado en PR #${{ github.event.pull_request.number }}."
+          else
+            TEXTO="❌ *Nodo 2: SonarCloud FALLÓ*%0AQuality Gate rechazado (o error de análisis) en PR #${{ github.event.pull_request.number }}.%0ARevisa: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="Markdown" \
+            -d text="$TEXTO"
+
+  # ============================================================================
+  # NODO 3: PRUEBAS UNITARIAS SPRING BOOT (JUnit 5 + JaCoCo)
+  # Depende del Nodo 1. Corre en PARALELO con el Nodo 2.
+  # ============================================================================
+  spring_boot_tests:
+    name: "Pruebas JUnit 5 + Cobertura JaCoCo"
+    needs: security_scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Ejecutar pruebas unitarias y generar reporte de cobertura
+        run: |
+          cd backend
+          chmod +x ./mvnw
+          ./mvnw clean test
+        env:
+          # Variables de entorno mínimas para que Spring arranque en modo test.
+          # application.properties las exige por nombre exacto (DB_URL/DB_USERNAME/
+          # DB_PASSWORD/JWT_SECRET) — no usa el binding automático SPRING_DATASOURCE_*.
+          DB_URL:      jdbc:h2:mem:testdb
+          DB_USERNAME: sa
+          DB_PASSWORD: ""
+          JWT_SECRET:  ${{ secrets.JWT_SECRET_TEST }}
+
+      - name: Publicar reporte de cobertura JaCoCo
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jacoco-report
+          path: backend/target/site/jacoco/
+
+      - name: Notificar fallo via Telegram (solo si falla)
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="❌ *Nodo 3 FALLÓ* — Pruebas JUnit en PR #${{ github.event.pull_request.number }}%0ARevisa los logs en: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d parse_mode="Markdown"
+
+  # ============================================================================
+  # NODO 4: CONVERGENCIA — MERGE A TEST
+  # Espera a que SonarCloud (Nodo 2) Y JUnit (Nodo 3) terminen con éxito.
+  # Hace el merge automático del PR a la rama 'test' y notifica por Telegram.
+  # ============================================================================
+  merge_to_test:
+    name: "Merge a Test"
+    needs: [sonarcloud_scan, spring_boot_tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge automático del PR a la rama 'test'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} \
+            --merge \
+            --auto \
+            --subject "[CI] Merge automático PR #${{ github.event.pull_request.number }} → test"
+
+      - name: Notificar éxito via Telegram
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="Markdown" \
+            -d text="*Pipeline exitoso*%0A%0A Seguridad ML: PASADO%0A SonarCloud Quality Gate: PASADO%0A JUnit + JaCoCo: PASADO%0A%0A PR \`#${{ github.event.pull_request.number }}\` mergeado a \`test\` correctamente."
+
+  # ============================================================================
+  # NODO 4.5: MERGE AUTOMÁTICO TEST → MAIN
+  # Depende del Nodo 4. Una vez que el merge a test fue exitoso,
+  # fusiona la rama test en main automáticamente.
+  # ============================================================================
+  merge_to_main:
+    name: "Merge a Main"
+    needs: merge_to_test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Descargar código de la rama main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configurar usuario de Git (Bot)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fusionar test en main y hacer Push
+        run: |
+          git fetch origin test
+          git merge origin/test --no-edit
+          git push origin main
+
+      - name: Notificar merge a main via Telegram
+        if: success()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="Markdown" \
+            -d text=" *Merge automático exitoso*%0A%0ARama \`test\` fusionada en \`main\` correctamente.%0A%0A Iniciando despliegue en producción..."
+
+  # ============================================================================
+  # NODO 5: DESPLIEGUE EN PRODUCCIÓN (Docker + Render)
+  # Depende del Nodo 4.5. Se ejecuta tras el merge automático a main.
+  # El despliegue se dispara explícitamente desde el pipeline (deploy hook +
+  # verificación de salud), no por el webhook automático de Render al repo,
+  # para garantizar que el código desplegado pasó los análisis de seguridad.
+  # ============================================================================
+  deploy_production:
+    name: "Build Docker y Despliegue en Render"
+    needs: merge_to_main
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Compilar y empaquetar el backend
+        run: |
+          cd backend
+          chmod +x ./mvnw
+          ./mvnw package -DskipTests
+
+      - name: Iniciar sesión en Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Construir y subir imagen Docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/master-gateway-backend:latest
+
+      - name: Notificar Docker Push via Telegram
+        if: success()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="Markdown" \
+            -d text=" *Paso 1/2: Imagen Docker Lista*%0A%0ASe ha construido y subido la imagen de Spring Boot a Docker Hub correctamente.%0A%0A Iniciando el despliegue automático en Render..."
+
+      - name: Disparar re-deploy en Render (Deploy Hook)
+        run: |
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+
+      - name: Esperar a que el contenedor de Spring Boot levante
+        run: |
+          echo "Iniciando despliegue en Render. Esperando a que el servidor responda..."
+
+          # Reemplaza esto con la URL pública real del servicio en Render:
+          URL="${{ secrets.RENDER_SERVICE_URL }}"
+
+          sleep 40
+
+          TIMEOUT=300
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" "$URL")
+
+            if [ "$STATUS" -eq 200 ] || [ "$STATUS" -eq 401 ] || [ "$STATUS" -eq 403 ] || [ "$STATUS" -eq 404 ]; then
+              echo " ¡La aplicación está arriba y respondiendo en Producción! (HTTP $STATUS)"
+              exit 0
+            fi
+
+            echo "Aún arrancando... (HTTP $STATUS). Reintentando en 15 segundos."
+            sleep 15
+            ELAPSED=$((ELAPSED + 15))
+          done
+
+          echo " Tiempo de espera agotado. El contenedor no logró arrancar a tiempo."
+          exit 1
+
+      - name: Notificar despliegue exitoso via Telegram
+        if: success()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="Markdown" \
+            -d text=" *Paso 2/2: Despliegue Exitoso*%0A%0AEl contenedor ya está online y respondiendo peticiones.%0ARama: \`main\`%0ACommit: \`${{ github.sha }}\`"
+
+      - name: Notificar fallo del despliegue via Telegram
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="Markdown" \
+            -d text=" *ERROR EN EL PIPELINE DE PRODUCCIÓN*%0A%0AAlgo falló durante la creación de Docker o el arranque en Render.%0ARama: \`main\`%0ARevisa los logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
