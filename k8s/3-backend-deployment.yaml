@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: master-gateway-backend
+  namespace: master-gateway-ns
+  labels:
+    app: master-gateway-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: master-gateway-backend
+  template:
+    metadata:
+      labels:
+        app: master-gateway-backend
+    spec:
+      containers:
+        - name: backend
+          image: javi3103/master-gateway-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: backend-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: JWT_SECRET
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

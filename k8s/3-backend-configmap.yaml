@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: master-gateway-ns
+data:
+  DB_URL: "jdbc:postgresql://postgres:5432/master_gateway"
+  DB_USERNAME: "postgres"
+  CORS_ALLOWED_ORIGIN: "http://mastergateway.local"

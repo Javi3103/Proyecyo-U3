@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: master-gateway-frontend
+  namespace: master-gateway-ns
+  labels:
+    app: master-gateway-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: master-gateway-frontend
+  template:
+    metadata:
+      labels:
+        app: master-gateway-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: javi3103/master-gateway-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi

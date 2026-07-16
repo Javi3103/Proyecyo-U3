@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: master-gateway-backend
+  namespace: master-gateway-ns
+spec:
+  selector:
+    app: master-gateway-backend
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP
