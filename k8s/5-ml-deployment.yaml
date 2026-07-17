@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: master-gateway-ml
+  namespace: master-gateway-ns
+  labels:
+    app: master-gateway-ml
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: master-gateway-ml
+  template:
+    metadata:
+      labels:
+        app: master-gateway-ml
+    spec:
+      containers:
+        - name: ml
+          image: javi3103/master-gateway-ml:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi

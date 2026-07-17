@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: master-gateway-ml
+  namespace: master-gateway-ns
+spec:
+  selector:
+    app: master-gateway-ml
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+  type: ClusterIP
