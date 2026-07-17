@@ -312,14 +312,16 @@ jobs:
             -d text=" *Merge automático exitoso*%0A%0ARama \`test\` fusionada en \`main\` correctamente.%0A%0A Iniciando despliegue en producción..."
 
   # ============================================================================
-  # NODO 5: DESPLIEGUE EN PRODUCCIÓN (Docker + Render)
+  # NODO 5: PUBLICACIÓN DE IMAGEN DOCKER (Docker Hub)
   # Depende del Nodo 4.5. Se ejecuta tras el merge automático a main.
-  # El despliegue se dispara explícitamente desde el pipeline (deploy hook +
-  # verificación de salud), no por el webhook automático de Render al repo,
-  # para garantizar que el código desplegado pasó los análisis de seguridad.
+  # El despliegue real a producción es manual, vía Kubernetes/Minikube
+  # (ver k8s/README.md) — no hay un servicio público al que el pipeline
+  # pueda desplegar automáticamente (Render fue descartado). Este nodo solo
+  # garantiza que la imagen del backend en Docker Hub siempre refleje el
+  # código que ya pasó por seguridad ML + SonarCloud + JUnit.
   # ============================================================================
   deploy_production:
-    name: "Build Docker y Despliegue en Render"
+    name: "Build y Publicar Imagen Docker (Docker Hub)"
     needs: merge_to_main
     runs-on: ubuntu-latest
 
@@ -359,52 +361,12 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d parse_mode="Markdown" \
-            -d text=" *Paso 1/2: Imagen Docker Lista*%0A%0ASe ha construido y subido la imagen de Spring Boot a Docker Hub correctamente.%0A%0A Iniciando el despliegue automático en Render..."
+            -d text=" *Imagen Docker publicada*%0A%0ASe construyó y subió la imagen del backend a Docker Hub correctamente.%0ARama: \`main\`%0ACommit: \`${{ github.sha }}\`%0A%0AEl despliegue en Kubernetes (Minikube) se hace manualmente con 'kubectl rollout restart' — ver k8s/README.md."
 
-      - name: Disparar re-deploy en Render (Deploy Hook)
-        run: |
-          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
-
-      - name: Esperar a que el contenedor de Spring Boot levante
-        run: |
-          echo "Iniciando despliegue en Render. Esperando a que el servidor responda..."
-
-          # Reemplaza esto con la URL pública real del servicio en Render:
-          URL="${{ secrets.RENDER_SERVICE_URL }}"
-
-          sleep 40
-
-          TIMEOUT=300
-          ELAPSED=0
-
-          while [ $ELAPSED -lt $TIMEOUT ]; do
-            STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" "$URL")
-
-            if [ "$STATUS" -eq 200 ] || [ "$STATUS" -eq 401 ] || [ "$STATUS" -eq 403 ] || [ "$STATUS" -eq 404 ]; then
-              echo " ¡La aplicación está arriba y respondiendo en Producción! (HTTP $STATUS)"
-              exit 0
-            fi
-
-            echo "Aún arrancando... (HTTP $STATUS). Reintentando en 15 segundos."
-            sleep 15
-            ELAPSED=$((ELAPSED + 15))
-          done
-
-          echo " Tiempo de espera agotado. El contenedor no logró arrancar a tiempo."
-          exit 1
-
-      - name: Notificar despliegue exitoso via Telegram
-        if: success()
-        run: |
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d parse_mode="Markdown" \
-            -d text=" *Paso 2/2: Despliegue Exitoso*%0A%0AEl contenedor ya está online y respondiendo peticiones.%0ARama: \`main\`%0ACommit: \`${{ github.sha }}\`"
-
-      - name: Notificar fallo del despliegue via Telegram
+      - name: Notificar fallo via Telegram
         if: failure()
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d parse_mode="Markdown" \
-            -d text=" *ERROR EN EL PIPELINE DE PRODUCCIÓN*%0A%0AAlgo falló durante la creación de Docker o el arranque en Render.%0ARama: \`main\`%0ARevisa los logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            -d text=" *ERROR AL PUBLICAR LA IMAGEN DOCKER*%0A%0ARama: \`main\`%0ARevisa los logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
