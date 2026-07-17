@@ -75,19 +75,23 @@ kubectl get pods -n master-gateway-ns -w
 
 ## 4. Acceder desde el navegador
 
-```bash
-minikube ip
-# copia la IP que devuelve
+**Importante en Windows con `--driver=docker`:** ni `minikube ip` ni `minikube tunnel` funcionan de forma directa aquí — `minikube ip` no es alcanzable desde el host (el driver Docker en Windows no expone la IP del nodo directamente), y `minikube tunnel` solo sirve para Services tipo `LoadBalancer`, pero el Service del Ingress Controller que crea el addon es tipo `NodePort`. La forma que sí funciona:
 
-# CMD/PowerShell como administrador:
-notepad C:\Windows\System32\drivers\etc\hosts
-# añade la línea:
-# <IP>   mastergateway.local
+```powershell
+# En una terminal de PowerShell COMO ADMINISTRADOR (el puerto 80 requiere privilegios
+# elevados en Windows) — déjala abierta mientras usas la app:
+kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 80:80
 ```
 
-Abre `http://mastergateway.local`.
+Luego, en **otra** terminal como administrador, agrega el dominio local (apuntando a tu propia máquina, porque el `port-forward` ya reenvía el tráfico ahí):
 
-**Si el Ingress/DNS no responde**, usa `port-forward` como respaldo (igual que enseña la guía):
+```powershell
+Add-Content -Path "C:\Windows\System32\drivers\etc\hosts" -Value "`n127.0.0.1`tmastergateway.local"
+```
+
+Abre `http://mastergateway.local`. El frontend fue construido con `VITE_API_BASE_URL=http://mastergateway.local` (sin puerto) horneado en el bundle, así que **tiene que ser el puerto 80** — si usas otro puerto para el port-forward, las llamadas del frontend a `/api` fallarán porque irán a un origen distinto.
+
+**Si el Ingress/DNS no responde de ningún modo**, usa `port-forward` directo a un servicio como último respaldo (igual que enseña la guía):
 
 ```bash
 kubectl port-forward -n master-gateway-ns svc/master-gateway-frontend 8000:80
@@ -97,13 +101,13 @@ Y accede a `http://localhost:8000` (nota: con port-forward puro, sin Ingress, la
 
 ## 5. Sembrar un usuario de prueba
 
-Como no hay endpoint público de registro, hay que insertar un usuario a mano en el Postgres del clúster:
+Como no hay endpoint público de registro, hay que insertar un usuario a mano en el Postgres del clúster. En Windows, `kubectl cp` falla con rutas tipo `C:\...` (el `:` del disco confunde el parser de `kubectl cp`, que espera `namespace/pod:ruta`) — usa `kubectl exec` con la entrada estándar en su lugar:
 
-```bash
-kubectl exec -it -n master-gateway-ns deployment/postgres -- psql -U postgres -d master_gateway
+```powershell
+kubectl exec -i -n master-gateway-ns deployment/postgres -- psql -U postgres -d master_gateway < ruta\al\seed.sql
 ```
 
-Y ahí correr el mismo `seed.sql` que se usó para las pruebas locales (roles ADMIN/Vendedor, módulos, menús — ver memoria del proyecto / conversación previa).
+(el contenido de `seed.sql` — roles ADMIN/Vendedor, módulos, menús — es el mismo que se usó para las pruebas locales, ver memoria del proyecto / conversación previa).
 
 ## Comandos útiles de diagnóstico
 
