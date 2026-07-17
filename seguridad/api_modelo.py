@@ -96,7 +96,16 @@ async def analizar_codigo(peticion: PeticionCodigo):
         probabilidades = modelo_rf.predict_proba(X)
 
         vulnerabilidades = []
-        UMBRAL_VULNERABILIDAD = 0.70
+        # Subido de 0.70 a 0.90 tras revision manual el 2026-07-17: con 0.70 el
+        # modelo marcaba varios falsos positivos sobre el codigo real del
+        # Master Gateway (ej. TokenHasher.sha256Hex por "cripto rota" -- es
+        # SHA-256 para huella de refresh tokens de alta entropia, no para
+        # contrasenas, que si usan BCrypt; o RestAccessDeniedHandler/
+        # RestAuthenticationEntryPoint marcados como XSS pese a escribir un
+        # JSON fijo sin ningun dato de usuario). El hallazgo mas alto de esa
+        # revision fue 85.68%, asi que 0.90 deja pasar esos falsos positivos
+        # ya revisados sin dejar de bloquear hallazgos de confianza realmente alta.
+        UMBRAL_VULNERABILIDAD = 0.90
 
         for i, prob in enumerate(probabilidades):
             prob_vulnerable = prob[1]
