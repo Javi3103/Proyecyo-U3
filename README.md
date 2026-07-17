@@ -26,7 +26,9 @@ Requiere el backend corriendo en paralelo (con `CORS_ALLOWED_ORIGIN=http://local
 
 ## Pipeline CI/CD (`.github/workflows/ci-cd.yml`)
 
-Push a `dev` → PR automático a `test` → (seguridad ML → SonarCloud + JUnit/JaCoCo en paralelo) → merge automático a `test` → merge automático a `main` → build Docker + deploy a Render, con notificaciones a Telegram en cada nodo.
+Push a `dev` → PR automático a `test` → (seguridad ML → SonarCloud + JUnit/JaCoCo en paralelo) → merge automático a `test` → merge automático a `main` → build y publicación de la imagen Docker en Docker Hub, con notificaciones a Telegram en cada nodo. El despliegue final a producción es manual, vía Kubernetes/Minikube (ver [`k8s/README.md`](k8s/README.md)) — no hay servicio PaaS público al que el pipeline despliegue automáticamente.
+
+SonarCloud corre en modo informativo (`sonar.qualitygate.wait=false`): el plan Free no incluye evaluación de Quality Gate sobre PRs/branches (solo la rama `main`), así que el gate de seguridad real que bloquea el merge es el Nodo 1 (modelo ML propio).
 
 El análisis de seguridad ML (carpeta [`/seguridad`](seguridad)) reutiliza un modelo Random Forest pre-entrenado sobre Java (CWE/Juliet) del proyecto P2; expone un microservicio FastAPI (`api_modelo.py`) que debe estar desplegado aparte, y un script de CI (`evaluar_pr.py`) que lo consume por cada PR.
 
@@ -41,7 +43,5 @@ El análisis de seguridad ML (carpeta [`/seguridad`](seguridad)) reutiliza un mo
 | `SONAR_TOKEN` / `SONAR_ORGANIZATION` / `SONAR_PROJECT_KEY` | Credenciales de SonarCloud para el Quality Gate. |
 | `JWT_SECRET_TEST` | Secret JWT dummy usado solo para que el `ApplicationContext` levante en los tests (no es el secret de producción). |
 | `DOCKER_USERNAME` / `DOCKER_PASSWORD` | Credenciales de Docker Hub para publicar la imagen `master-gateway-backend`. |
-| `RENDER_DEPLOY_HOOK_URL` | Deploy Hook del servicio en Render (dispara el redeploy desde el pipeline, no por webhook automático). |
-| `RENDER_SERVICE_URL` | URL pública del servicio en Render, usada para el health-check post-deploy. |
 
-Las credenciales reales de base de datos y el `JWT_SECRET` de producción se inyectan como variables de entorno directamente en Render (nunca en el repo).
+Las credenciales reales de base de datos y el `JWT_SECRET` de producción se crean como Kubernetes Secrets en el clúster de Minikube (nunca en el repo) — ver [`k8s/README.md`](k8s/README.md).
