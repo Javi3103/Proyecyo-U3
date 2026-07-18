@@ -272,9 +272,12 @@ jobs:
             -d text="*Pipeline exitoso*%0A%0A Seguridad ML: PASADO%0A SonarCloud: análisis completado%0A JUnit + JaCoCo: PASADO%0A%0A PR \`#${{ github.event.pull_request.number }}\` mergeado a \`test\` correctamente."
 
   # ============================================================================
-  # NODO 4.5: MERGE AUTOMÁTICO TEST → MAIN
-  # Depende del Nodo 4. Una vez que el merge a test fue exitoso,
-  # fusiona la rama test en main automáticamente.
+  # NODO 4.5: MERGE AUTOMÁTICO TEST → MAIN (vía Pull Request)
+  # Depende del Nodo 4. Una vez que el merge a test fue exitoso, crea (o
+  # reutiliza) un PR test → main y lo mergea vía API — NUNCA con push directo,
+  # para que la rama 'main' pueda quedar protegida en GitHub (Settings →
+  # Branches: "Require a pull request before merging", sin excepciones ni para
+  # administradores) sin romper el pipeline.
   # ============================================================================
   merge_to_main:
     name: "Merge a Main"
@@ -284,24 +287,36 @@ jobs:
 
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
-      - name: Descargar código de la rama main
+      - name: Descargar código
         uses: actions/checkout@v4
         with:
-          ref: main
           fetch-depth: 0
 
-      - name: Configurar usuario de Git (Bot)
+      - name: Crear (o reutilizar) y mergear el PR test → main
+        env:
+          # PAT_AUTOMATION: el GITHUB_TOKEN por defecto no puede aprobar/mergear
+          # PRs contra una rama protegida en algunos repos personales; se usa
+          # el mismo PAT que ya crea el PR dev → test en el Nodo 0.
+          GH_TOKEN: ${{ secrets.PAT_AUTOMATION }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          EXISTING_PR=$(gh pr list --base main --head test --state open --json number --jq '.[0].number')
 
-      - name: Fusionar test en main y hacer Push
-        run: |
-          git fetch origin test
-          git merge origin/test --no-edit
-          git push origin main
+          if [ -n "$EXISTING_PR" ]; then
+            PR_NUMBER="$EXISTING_PR"
+            echo "Ya existe un PR abierto de test → main: #$PR_NUMBER"
+          else
+            gh pr create \
+              --base main \
+              --head test \
+              --title "[CI] Merge automático test → main" \
+              --body "PR generado automáticamente por el pipeline tras pasar seguridad ML, SonarCloud y JUnit en PR #${{ github.event.pull_request.number }}."
+            PR_NUMBER=$(gh pr list --base main --head test --state open --json number --jq '.[0].number')
+          fi
+
+          gh pr merge "$PR_NUMBER" --merge --subject "[CI] Merge automático PR #$PR_NUMBER → main"
 
       - name: Notificar merge a main via Telegram
         if: success()
@@ -309,7 +324,7 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d parse_mode="Markdown" \
-            -d text=" *Merge automático exitoso*%0A%0ARama \`test\` fusionada en \`main\` correctamente.%0A%0A Iniciando despliegue en producción..."
+            -d text=" *Merge automático exitoso*%0A%0ARama \`test\` fusionada en \`main\` correctamente (vía PR).%0A%0A Iniciando despliegue en producción..."
 
   # ============================================================================
   # NODO 5: PUBLICACIÓN DE IMAGEN DOCKER (Docker Hub)
