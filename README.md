@@ -18,6 +18,47 @@ Centraliza identidad, roles y navegación para que los microservicios hijos (ej.
 | OE4 | Arquitectura Zero Trust para microservicios hijos | `POST /api/internals/validate-token` en [`InternalTokenController.java`](backend/src/main/java/ec/edu/espe/mastergateway/auth/InternalTokenController.java); todo endpoint exige JWT salvo 4 rutas públicas explícitas en [`SecurityConfig.java`](backend/src/main/java/ec/edu/espe/mastergateway/security/SecurityConfig.java) |
 | OE5 | Shift-Left: pruebas, validación, anti-SQLi, hash | 56 pruebas unitarias de seguridad (`backend/src/test/java`), validación de entradas con Bean Validation, ORM parametrizado (incluso la consulta nativa recursiva usa `@Param`), contraseñas con BCrypt costo 12 |
 
+### Stack tecnológico
+
+| Componente | Herramienta | Por qué |
+|---|---|---|
+| Framework backend | **Spring Boot** | Spring Security da autenticación/autorización declarativa madura (filtros, `@EnableMethodSecurity`) |
+| ORM | **Hibernate + Spring Data JPA** | Soporta `@Query(nativeQuery = true)` para el `WITH RECURSIVE` del menú recursivo, y `@SQLDelete`/`@SQLRestriction` para el soft-delete global sin repetirlo en cada Service |
+| Base de datos | **PostgreSQL** | Soporte nativo de `WITH RECURSIVE` |
+| Frontend | **React + Vite + React Router** | React Router permite inyectar rutas en tiempo de ejecución a partir del JSON del menú; Vite da build rápido para el Dockerfile multi-stage |
+| Autenticación | **JWT propio (jjwt)**, sin sesión de servidor | Arquitectura *Stateless*, sin estado en memoria ni BD del lado del servidor |
+| Hash de contraseñas | **BCrypt, costo 12** | Nativo en Spring Security (`BCryptPasswordEncoder`), factor de costo configurado por encima del valor por defecto |
+
+### Endpoints implementados (sección 9 del PDF)
+
+Todos los endpoints mínimos que exige la tabla del PDF, verificados contra los Controllers reales:
+
+| Dominio | Método | Endpoint | Implementado en |
+|---|---|---|---|
+| Autenticación | POST | `/api/auth/login` | `AuthController` |
+| Autenticación | POST | `/api/auth/select-role` | `AuthController` |
+| Autenticación | POST | `/api/auth/refresh-token` | `AuthController` |
+| Autenticación | POST | `/api/auth/logout` | `AuthController` |
+| Validación interna | POST | `/api/internals/validate-token` | `InternalTokenController` |
+| Usuarios | GET | `/api/users` | `UsuarioController` |
+| Usuarios | GET | `/api/users/{id}` | `UsuarioController` |
+| Usuarios | POST | `/api/users` | `UsuarioController` |
+| Usuarios | PUT | `/api/users/{id}` | `UsuarioController` |
+| Usuarios | DELETE | `/api/users/{id}` | `UsuarioController` |
+| Roles | GET | `/api/roles` | `RolController` |
+| Roles | POST | `/api/roles` | `RolController` |
+| Roles | PUT | `/api/roles/{id}` | `RolController` |
+| Roles | DELETE | `/api/roles/{id}` | `RolController` |
+| Roles | POST | `/api/roles/{id}/users` | `RolController` |
+| Roles | DELETE | `/api/roles/{id}/users/{userId}` | `RolController` |
+| Módulos | GET/POST/PUT/DELETE | `/api/modules`, `/api/modules/{id}` | `ModuloController` |
+| Roles | POST | `/api/roles/{id}/modules` | `RolController` |
+| Menús | GET | `/api/menus/tree` | `MenuController` |
+| Menús | POST | `/api/menus` | `MenuController` |
+| Menús | PUT | `/api/menus/{id}` | `MenuController` |
+| Menús | DELETE | `/api/menus/{id}` | `MenuController` |
+| Roles | POST | `/api/roles/{id}/menus` | `RolController` |
+
 ### Decisiones de seguridad clave
 
 - **Least Privilege real**: el JWT emitido en `/select-role` solo lleva los permisos del rol elegido, nunca los de otros roles que el usuario tenga asignados.
