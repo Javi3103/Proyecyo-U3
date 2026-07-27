@@ -155,7 +155,7 @@ def main():
     print("=" * 60)
 
     # 5.0 Enviar notificación obligatoria de inicio a Telegram
-    enviar_telegram(f" Inicio de revisión de seguridad: Evaluando PR #{PR_NUMBER} en {REPO_NAME}...")
+    enviar_telegram(f"🔎 Inicio de revisión de seguridad: Evaluando PR #{PR_NUMBER} en {REPO_NAME}...")
 
     # 5.1 Verificar que el microservicio esté disponible
     verificar_microservicio()
@@ -166,7 +166,7 @@ def main():
 
     if not archivos:
         print("\n No se encontraron archivos .java modificados. El PR es seguro por defecto.")
-        enviar_telegram(f" PR #{PR_NUMBER} en {REPO_NAME}: No hay archivos Java para analizar. Continuando...")
+        enviar_telegram(f"✅ PR #{PR_NUMBER} en {REPO_NAME}: No hay archivos Java para analizar. Continuando...")
         sys.exit(0)
 
     print(f"\n Analizando {len(archivos)} archivo(s) con el modelo ML...")
