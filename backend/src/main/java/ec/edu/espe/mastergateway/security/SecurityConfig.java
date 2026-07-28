@@ -34,7 +34,13 @@ public class SecurityConfig {
             "/api/auth/login",
             "/api/auth/select-role",
             "/api/auth/refresh-token",
-            "/api/internals/validate-token"
+            "/api/internals/validate-token",
+            // Documentacion interactiva (Swagger UI) — solo la pagina, no las
+            // llamadas reales a la API que hace desde ahi (esas siguen
+            // exigiendo el Bearer token, como cualquier otro endpoint).
+            "/swagger-ui/**",
+            "/swagger-ui.html",
+            "/v3/api-docs/**"
     };
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
