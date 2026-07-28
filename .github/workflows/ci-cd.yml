@@ -74,6 +74,28 @@ jobs:
             -d text="✅ *PR Automático creado*%0A%0ASe ha creado/actualizado un PR de \`dev\` → \`test\`.%0AEl pipeline de validación iniciará en breve.%0A%0ACommit: \`${{ github.sha }}\`%0AAutor: ${{ github.actor }}"
 
   # ============================================================================
+  # NODO 0.5: INICIO DE PIPELINE EN MAIN
+  # Se ejecuta al hacer push a 'main' (disparado por el merge automático del
+  # Nodo 4.5). Corresponde al primer evento de la Figura 4 del Anexo del PDF
+  # ("Pipeline iniciado en MAIN"). El resto de nodos (ML/SonarCloud/JUnit/
+  # merges) ya corrieron antes, en el PR 'dev -> test'; este job solo notifica
+  # que el código llegó a producción, para que el run de Actions de este push
+  # no aparezca vacío/"skipped" sin ningún job real.
+  # ============================================================================
+  notify_main_pipeline_start:
+    name: "Notificar inicio de pipeline en Main"
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Notificar via Telegram
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="Markdown" \
+            -d text="🚀 *Pipeline iniciado en MAIN*%0A%0ACommit \`${{ github.sha }}\` llegó a producción.%0AImagen Docker ya publicada — despliegue en Kubernetes disponible con 'kubectl rollout restart'."
+
+  # ============================================================================
   # NODO 1: REVISIÓN DE SEGURIDAD (Modelo de Minería ML)
   # Evalúa los .java modificados del PR con el modelo predictivo Python
   # (carpeta /seguridad). Si hay vulnerabilidades, comenta el PR, crea un Issue
