@@ -24,6 +24,12 @@ public class MenuService {
     private final MenuRepository menuRepository;
     private final ModuloRepository moduloRepository;
 
+    /** Lista plana de los menús de un módulo (para administrar: elegir padre, editar, eliminar). */
+    @Transactional(readOnly = true)
+    public List<MenuResponse> listarPorModulo(UUID moduloId) {
+        return menuRepository.findByModuloId(moduloId).stream().map(MenuResponse::from).toList();
+    }
+
     /** GET /api/menus/tree: árbol jerárquico completo del rol activo en el token (Least Privilege). */
     @Transactional(readOnly = true)
     public List<MenuNodoDto> obtenerArbol(UUID rolId) {

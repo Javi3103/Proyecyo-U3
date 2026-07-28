@@ -33,12 +33,32 @@ FROM modulo m
 WHERE m.nombre = 'Administracion'
   AND NOT EXISTS (SELECT 1 FROM menu WHERE nombre = 'Administracion' AND parent_id IS NULL);
 
--- 4. Item hoja "Usuarios" (nodo final, con url real) bajo el menu "Administracion"
+-- 4. Items hoja bajo el menu "Administracion" (nodos finales, con url real):
+--    Usuarios, Roles, Modulos y Menus -- estos 3 ultimos tienen pantalla real
+--    de CRUD en el frontend (ver frontend/src/pages/admin/).
 INSERT INTO menu (id, nombre, url, modulo_id, parent_id, estado, fecha_creacion, fecha_actualizacion)
 SELECT gen_random_uuid(), 'Usuarios', '/admin/usuarios', padre.modulo_id, padre.id, 'ACTIVO', now(), now()
 FROM menu padre
 WHERE padre.nombre = 'Administracion' AND padre.parent_id IS NULL
   AND NOT EXISTS (SELECT 1 FROM menu WHERE nombre = 'Usuarios' AND url = '/admin/usuarios');
+
+INSERT INTO menu (id, nombre, url, modulo_id, parent_id, estado, fecha_creacion, fecha_actualizacion)
+SELECT gen_random_uuid(), 'Roles', '/admin/roles', padre.modulo_id, padre.id, 'ACTIVO', now(), now()
+FROM menu padre
+WHERE padre.nombre = 'Administracion' AND padre.parent_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM menu WHERE nombre = 'Roles' AND url = '/admin/roles');
+
+INSERT INTO menu (id, nombre, url, modulo_id, parent_id, estado, fecha_creacion, fecha_actualizacion)
+SELECT gen_random_uuid(), 'Modulos', '/admin/modulos', padre.modulo_id, padre.id, 'ACTIVO', now(), now()
+FROM menu padre
+WHERE padre.nombre = 'Administracion' AND padre.parent_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM menu WHERE nombre = 'Modulos' AND url = '/admin/modulos');
+
+INSERT INTO menu (id, nombre, url, modulo_id, parent_id, estado, fecha_creacion, fecha_actualizacion)
+SELECT gen_random_uuid(), 'Menus', '/admin/menus', padre.modulo_id, padre.id, 'ACTIVO', now(), now()
+FROM menu padre
+WHERE padre.nombre = 'Administracion' AND padre.parent_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM menu WHERE nombre = 'Menus' AND url = '/admin/menus');
 
 -- 5. Asignar el modulo y sus menus al rol "ADMIN"
 INSERT INTO rol_modulo (id, rol_id, modulo_id, estado, fecha_creacion, fecha_actualizacion)
@@ -50,7 +70,7 @@ WHERE r.nombre = 'ADMIN' AND m.nombre = 'Administracion'
 INSERT INTO rol_menu (id, rol_id, menu_id, estado, fecha_creacion, fecha_actualizacion)
 SELECT gen_random_uuid(), r.id, mn.id, 'ACTIVO', now(), now()
 FROM rol r, menu mn
-WHERE r.nombre = 'ADMIN' AND mn.nombre IN ('Administracion', 'Usuarios')
+WHERE r.nombre = 'ADMIN' AND mn.nombre IN ('Administracion', 'Usuarios', 'Roles', 'Modulos', 'Menus')
   AND NOT EXISTS (SELECT 1 FROM rol_menu WHERE rol_id = r.id AND menu_id = mn.id);
 
 -- 6. Usuario "admin@mastergateway.local" / contrasena "Test1234"
