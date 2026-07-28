@@ -54,7 +54,11 @@ async function rawRequest(path, { method = 'GET', body, auth = true } = {}) {
 
   if (response.status === 204) return null
   if (!response.ok) throw await parseErrorBody(response)
-  return response.json()
+
+  // Algunos endpoints (ej. asignar usuario/módulo/menú a un rol) responden
+  // 201 Created sin body -- response.json() truena con un texto vacío.
+  const text = await response.text()
+  return text ? JSON.parse(text) : null
 }
 
 /** Único punto que sabe hablar con /api/auth/refresh-token, sin pasar por request() para no reentrar. */

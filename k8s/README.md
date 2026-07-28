@@ -1,5 +1,32 @@
 # Despliegue en Kubernetes (Minikube)
 
+## Resumen para la exposición
+
+**Por qué está esto aquí:** el PDF de referencia del proyecto pide un PaaS gratuito (Railway/Render) para el despliegue automático. Kubernetes fue un requisito **adicional**, pedido aparte por el profesor (guía "Instalación de Kubernetes en Windows 11 con Minikube"). No reemplaza nada del PDF — demuestra una capacidad extra: que el sistema puede operar como un ecosistema real de microservicios orquestados, no solo como una app monolítica en un solo contenedor.
+
+**Arquitectura desplegada** — 4 Deployments independientes en el namespace `master-gateway-ns`, cada uno con su propio Service, detrás de un único Ingress (`mastergateway.local`):
+
+| Componente | Rol |
+|---|---|
+| `postgres` | Base de datos, con PVC para persistencia |
+| `master-gateway-backend` | El microservicio maestro (Spring Boot) |
+| `master-gateway-frontend` | SPA de React servida por nginx |
+| `master-gateway-ml` | Modelo de seguridad (uso interno del pipeline, no expuesto por el Ingress) |
+
+**Cómo esto refuerza los conceptos del PDF que ya defendiste:**
+
+- **OE4 (arquitectura lista para futuros microservicios):** cada componente corre aislado en su propio Pod/Deployment/Service — si mañana se agrega un "Módulo de Ventas" real, sería literalmente un Deployment + Service más en el mismo clúster, consumiendo `/api/internals/validate-token` del backend ya desplegado. Kubernetes es la prueba física de que la arquitectura de microservicios que pide el PDF funciona más allá de la teoría.
+- **Zero Trust no cambia con la infraestructura:** el backend sigue validando el JWT en cada request exactamente igual que corriendo localmente — Kubernetes no reemplaza ni debilita esa capa, solo cambia dónde corre el proceso.
+- **Gestión segura de Secrets (6.3 del PDF):** `JWT_SECRET` y las credenciales de Postgres se crean como Kubernetes Secrets (`kubectl create secret`), nunca están en los manifiestos versionados en git ni en las imágenes Docker.
+- **Decisión de diseño clave, útil si preguntan:** el `Ingress` (`6-ingress.yaml`) se hizo **sin** la anotación `rewrite-target` que usa el ejemplo del profesor — porque el backend espera rutas literales (`/api/auth/login`), y reescribirlas a `/` rompería toda la API con 404. Es una adaptación consciente, no un descuido.
+
+**Qué mostrar en vivo:**
+1. `kubectl get pods -n master-gateway-ns` — los 4 pods `Running`.
+2. La app funcionando en `http://mastergateway.local` (login → selección de rol → dashboard), igual que en local, pero corriendo desde contenedores orquestados.
+3. (Opcional, si preguntan) `kubectl describe secret backend-secret -n master-gateway-ns` — muestra que el valor no es legible en texto plano desde `describe`, reforzando la gestión segura de secrets.
+
+---
+
 Sigue el mismo flujo enseñado en la guía del curso (`minikube start --driver=docker` → habilitar Ingress → manifiestos `.yaml` separados → `kubectl apply` → dominio `.local`).
 
 ## 0. Construir y subir las imágenes a Docker Hub
@@ -101,13 +128,11 @@ Y accede a `http://localhost:8000` (nota: con port-forward puro, sin Ingress, la
 
 ## 5. Sembrar un usuario de prueba
 
-Como no hay endpoint público de registro, hay que insertar un usuario a mano en el Postgres del clúster. En Windows, `kubectl cp` falla con rutas tipo `C:\...` (el `:` del disco confunde el parser de `kubectl cp`, que espera `namespace/pod:ruta`) — usa `kubectl exec` con la entrada estándar en su lugar:
+Como no hay endpoint público de registro, el primer usuario se siembra a mano en el Postgres del clúster (`../seed.sql`, en la raíz del repo — crea el rol "Vendedor", el módulo "Ventas" con un ítem de menú, y un usuario `vendedor@mastergateway.local` asignado a ese rol; es aditivo, no toca ningún usuario admin que ya exista). En Windows, `kubectl cp` falla con rutas tipo `C:\...` (el `:` del disco confunde el parser de `kubectl cp`, que espera `namespace/pod:ruta`) — usa `kubectl exec` con la entrada estándar en su lugar:
 
 ```powershell
-kubectl exec -i -n master-gateway-ns deployment/postgres -- psql -U postgres -d master_gateway < ruta\al\seed.sql
+kubectl exec -i -n master-gateway-ns deployment/postgres -- psql -U postgres -d master_gateway < ..\seed.sql
 ```
-
-(el contenido de `seed.sql` — roles ADMIN/Vendedor, módulos, menús — es el mismo que se usó para las pruebas locales, ver memoria del proyecto / conversación previa).
 
 ## Comandos útiles de diagnóstico
 
