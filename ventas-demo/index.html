@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Microservicio Ventas (demo) — Zero Trust</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f1f5f9;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #0f172a;
+  }
+  .card {
+    width: 100%;
+    max-width: 640px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    padding: 32px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: #64748b; font-size: 14px; margin: 0 0 24px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 16px 0 6px; color: #334155; }
+  input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: monospace;
+  }
+  button {
+    margin-top: 20px;
+    width: 100%;
+    padding: 12px;
+    background: #0f172a;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: #1e293b; }
+  button:disabled { background: #94a3b8; cursor: not-allowed; }
+  #result { margin-top: 24px; }
+  .badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .badge.ok { background: #dcfce7; color: #166534; }
+  .badge.err { background: #fee2e2; color: #991b1b; }
+  .info-row { margin-top: 12px; font-size: 14px; }
+  .info-row span.k { color: #64748b; display: inline-block; min-width: 110px; }
+  .perm-list { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+  .note {
+    margin-top: 24px;
+    padding: 12px 14px;
+    background: #f8fafc;
+    border-left: 3px solid #94a3b8;
+    font-size: 12.5px;
+    color: #475569;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Microservicio Ventas (demo)</h1>
+    <p class="subtitle">Simula un microservicio hijo real: no tiene base de usuarios propia, valida cada token contra el Master Gateway.</p>
+
+    <label for="baseUrl">URL del Master Gateway</label>
+    <input id="baseUrl" value="http://mastergateway.local" />
+
+    <label for="token">Access Token (Bearer) — obtenido de /api/auth/select-role</label>
+    <input id="token" placeholder="eyJhbGciOiJIUzI1NiJ9..." />
+
+    <button id="btn" onclick="validar()">Validar contra el Master Gateway</button>
+
+    <div id="result"></div>
+
+    <div class="note">
+      Este micro-frontend llama a <code>POST /api/internals/validate-token</code> del Master Gateway
+      (Zero Trust — sección 6.1 del PDF) en vez de validar sesiones propias. La respuesta trae
+      <code>userId</code>, <code>roleId</code>, <code>role</code> y <code>permissions</code>, que este
+      microservicio usaría para decidir su propia lógica de autorización interna.
+    </div>
+  </div>
+
+<script>
+async function validar() {
+  const baseUrl = document.getElementById('baseUrl').value.trim().replace(/\/$/, '');
+  const token = document.getElementById('token').value.trim();
+  const btn = document.getElementById('btn');
+  const result = document.getElementById('result');
+
+  if (!token) {
+    result.innerHTML = '<span class="badge err">Pega un access token primero</span>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Validando...';
+  result.innerHTML = '';
+
+  try {
+    const res = await fetch(baseUrl + '/api/internals/validate-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      result.innerHTML = `<span class="badge err">❌ Token rechazado por el Master</span>
+        <div class="info-row">${body.message || res.status}</div>`;
+      return;
+    }
+
+    const data = await res.json();
+    const permisos = (data.permissions || []).map(p => `<li>${p}</li>`).join('') || '<li>(sin permisos)</li>';
+
+    result.innerHTML = `
+      <span class="badge ok">✅ Validado por Zero Trust</span>
+      <div class="info-row"><span class="k">Usuario ID:</span> ${data.userId}</div>
+      <div class="info-row"><span class="k">Rol:</span> ${data.role} <span style="color:#94a3b8">(${data.roleId})</span></div>
+      <div class="info-row"><span class="k">Permisos:</span>
+        <ul class="perm-list">${permisos}</ul>
+      </div>`;
+  } catch (e) {
+    result.innerHTML = `<span class="badge err">❌ No se pudo contactar al Master Gateway</span>
+      <div class="info-row">${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Validar contra el Master Gateway';
+  }
+}
+</script>
+</body>
+</html>

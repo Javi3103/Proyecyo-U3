@@ -6,4 +6,7 @@ metadata:
 data:
   DB_URL: "jdbc:postgresql://postgres:5432/master_gateway"
   DB_USERNAME: "postgres"
-  CORS_ALLOWED_ORIGIN: "http://mastergateway.local"
+  # http://localhost:5500 es el origen del microservicio de demo "Ventas"
+  # (ventas-demo/), corrido localmente con un servidor estatico para probar
+  # la integracion Zero Trust de un microservicio hijo real.
+  CORS_ALLOWED_ORIGIN: "http://mastergateway.local,http://localhost:5500"
