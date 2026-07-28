@@ -120,3 +120,31 @@ Las credenciales reales de base de datos y el `JWT_SECRET` de producción se cre
 ## Despliegue en Kubernetes
 
 Backend, frontend, modelo ML y PostgreSQL corren como Deployments independientes en un clúster de Minikube, expuestos por un único Ingress (`mastergateway.local`). Instrucciones completas, incluyendo las particularidades de Windows (`kubectl port-forward` en vez de `minikube tunnel`), en [`k8s/README.md`](k8s/README.md).
+
+## Despliegue en localhost 
+Primero inicializar la base de datoa con el seed.sql
+```
+docker exec -i master-gateway-postgres psql -U postgres -d master_gateway < seed.sql
+```
+
+Ingresar en el backend
+```
+cd backend
+cp .env.example .env
+
+y ejecutar con 
+.\mvnw.cmd spring-boot:run
+```
+
+Ejecutar el backend
+```
+cd frontend
+npm install
+
+$env:VITE_API_BASE_URL="http://localhost:{{port_backend}}"
+npm run dev
+```
+
+Se puede entrar a la aplicación con las credenciales de
+admin@mastergateway.local / Test1234
+vendedor@mastergateway.local / Vendedor123
