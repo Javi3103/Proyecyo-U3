@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -31,6 +32,12 @@ public class MenuController {
     @GetMapping("/tree")
     public List<MenuNodoDto> obtenerArbol(@AuthenticationPrincipal AuthenticatedUser principal) {
         return menuService.obtenerArbol(principal.rolId());
+    }
+
+    /** Lista plana (no el árbol) de los menús de un módulo — para la pantalla de administración. */
+    @GetMapping
+    public List<MenuResponse> listarPorModulo(@RequestParam UUID moduloId) {
+        return menuService.listarPorModulo(moduloId);
     }
 
     @PostMapping

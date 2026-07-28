@@ -2,6 +2,21 @@ import { NavLink } from 'react-router-dom'
 
 function MenuNode({ node, depth }) {
   const isLink = !!node.url
+  // Un microservicio hijo real (ej. Reservas) vive en otro origen -- eso no
+  // es una ruta interna de este SPA, es una navegación completa de página.
+  const esExterno = /^https?:\/\//.test(node.url ?? '')
+
+  if (isLink && esExterno) {
+    return (
+      <a
+        href={node.url}
+        className="block rounded px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
+        style={{ paddingLeft: `${0.75 + depth * 0.75}rem` }}
+      >
+        {node.nombre}
+      </a>
+    )
+  }
 
   if (isLink) {
     return (
