@@ -1,5 +1,6 @@
 package ec.edu.espe.mastergateway.security;
 
+import java.util.Arrays;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -69,11 +70,17 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /** Permite que el frontend (SPA en un origen distinto) consuma la API. */
+    /**
+     * Permite que el frontend (y microservicios hijos con su propia UI, ej. un
+     * futuro "Módulo de Ventas") consuman la API desde un origen distinto.
+     * Acepta una lista separada por comas para soportar varios orígenes a la vez.
+     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of(corsAllowedOrigin));
+        configuration.setAllowedOrigins(Arrays.stream(corsAllowedOrigin.split(","))
+                .map(String::trim)
+                .toList());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
 
